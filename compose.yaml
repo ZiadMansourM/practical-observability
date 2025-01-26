@@ -1,0 +1,79 @@
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector:0.80.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+    - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+    - 4317:4317 # For gRPC
+    - 4318:4318 # For HTTP
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: loki
+    command: -config.file=/etc/loki/local-config.yaml
+    depends_on:
+    - create_bucket
+    environment:
+    - LOKI_PORT=3100
+    volumes:
+    - ./config/loki-config.yaml:/etc/loki/local-config.yaml
+    ports:
+    - 3100:3100
+  
+  minio:
+    image: minio/minio
+    env_file: .env
+    volumes:
+    - ./volumes/minio-data:/data
+    ports:
+    - 9000:9000
+    - 9001:9001
+    command: server /data --console-address :9001
+
+  create_bucket:
+    image: minio/mc
+    depends_on:
+    - minio
+    entrypoint:
+    - /bin/sh
+    - -c
+    - |
+      until mc alias set myminio http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"; do
+        echo "Waiting for MinIO..."
+        sleep 2
+      done;
+      mc mb --ignore-existing myminio/loki;
+      mc anonymous set public myminio/loki;
+      exit 0;
+    env_file: .env
+    volumes:
+    - ./volumes/minio-data:/data
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0-ubuntu
+    container_name: grafana
+    environment:
+    - GF_SECURITY_ADMIN_USER=admin
+    - GF_SECURITY_ADMIN_PASSWORD=testing321
+    ports:
+    - 3000:3000
+    depends_on:
+    - loki
+    volumes:
+    - ./config/grafana-provisioning:/etc/grafana/provisioning
+    - ./volumes/grafana-data:/var/lib/grafana
+    - ./volumes/grafana-logs:/var/log/grafana
+
+  tempo:
+    image: grafana/tempo:2.7.0
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+    - ./config/tempo.yaml:/etc/tempo.yaml
+    - ./volumes/tempo-data:/var/tempo
+    post_start:
+    - command: chown -R 10001:10001 /var/tempo
+      user: root
+    ports:
+    - 3200 # tempo
+    - 4317 # otlp grpc
