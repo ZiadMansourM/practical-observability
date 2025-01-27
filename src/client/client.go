@@ -36,7 +36,7 @@ func main() {
 	}
 
 	// Make 5 requests to the dice server
-	for i := 0; i < 1_000; i++ {
+	for i := 0; i < 10_000; i++ {
 		callDiceServer(context.Background(), &client)
 		// time.Sleep(500 * time.Millisecond) // Add delay between calls to visualize traces more clearly
 	}
