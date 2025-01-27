@@ -34,6 +34,6 @@ datasources:
       datasourceUid: loki_uid
       spanStartTimeShift: '-1h'
       spanEndTimeShift: '1h'
-      tags: [{ key: 'service.name', value: 'service_name' }]
+      # tags: [{ key: 'service.name', value: 'service_name' }]
       customQuery: true
-      query: '{$${__tags}} | label_format level=detected_level | trace_id="$${__span.traceId}" | span_id="$${__span.spanId}"'
+      query: '{service_name=~".+"} | label_format level=detected_level | trace_id="$${__span.traceId}" | span_id="$${__span.spanId}"'
