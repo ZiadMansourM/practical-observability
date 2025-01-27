@@ -1,9 +1,9 @@
 ## ToDo:
 - [X] Grafana Volumes to save dashboards.
-- [ ] Loki to MinIO "Why not working!!!".
-- [ ] Loki Volume.
-- [ ] Tempo to MinIO.
-    - Deprived fields.
+- [X] Loki to MinIO "Why not working!!!".
+- [X] Loki and Tempo Volumes.
+- [X] Tempo to MinIO.
+- [ ] derived fields.
 - [ ] Get Mimir Up and running:
     - Instrument the code.
     - Modify Collector to send metrics to Mimir.

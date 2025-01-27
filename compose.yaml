@@ -1,6 +1,9 @@
+name: lgtm
+
 services:
   otel-collector:
     image: otel/opentelemetry-collector:0.80.0
+    restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
     - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
@@ -10,19 +13,22 @@ services:
 
   loki:
     image: grafana/loki:3.3.2
-    container_name: loki
+    restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
     depends_on:
-    - create_bucket
+      create_bucket:
+        condition: service_completed_successfully
     environment:
     - LOKI_PORT=3100
     volumes:
     - ./config/loki-config.yaml:/etc/loki/local-config.yaml
+    - ./volumes/loki-data:/loki
     ports:
     - 3100:3100
   
   minio:
     image: minio/minio
+    restart: unless-stopped
     env_file: .env
     volumes:
     - ./volumes/minio-data:/data
@@ -45,6 +51,8 @@ services:
       done;
       mc mb --ignore-existing myminio/loki;
       mc anonymous set public myminio/loki;
+      mc mb --ignore-existing myminio/tempo;
+      mc anonymous set public myminio/tempo;
       exit 0;
     env_file: .env
     volumes:
@@ -52,7 +60,7 @@ services:
 
   grafana:
     image: grafana/grafana-oss:11.4.0-ubuntu
-    container_name: grafana
+    restart: unless-stopped
     environment:
     - GF_SECURITY_ADMIN_USER=admin
     - GF_SECURITY_ADMIN_PASSWORD=testing321
@@ -60,6 +68,7 @@ services:
     - 3000:3000
     depends_on:
     - loki
+    - tempo
     volumes:
     - ./config/grafana-provisioning:/etc/grafana/provisioning
     - ./volumes/grafana-data:/var/lib/grafana
@@ -67,7 +76,11 @@ services:
 
   tempo:
     image: grafana/tempo:2.7.0
+    restart: unless-stopped
     command: [ "-config.file=/etc/tempo.yaml" ]
+    depends_on:
+      create_bucket:
+        condition: service_completed_successfully
     volumes:
     - ./config/tempo.yaml:/etc/tempo.yaml
     - ./volumes/tempo-data:/var/tempo

@@ -15,41 +15,55 @@ query_frontend:
 
 distributor:
   receivers:
-    otlp:
-      protocols:
-        grpc:
-          endpoint: "tempo:4317"
+      otlp:
+        protocols:
+          http:
+          grpc:
 
 ingester:
   max_block_duration: 5m               # cut the headblock when this much time passes. this is being set for demo purposes and should probably be left alone normally
 
 compactor:
   compaction:
-    block_retention: 1h                # overall Tempo trace retention. set for demo purposes
+    # Configure total trace retention
+    block_retention: 48h
 
-metrics_generator:
-  registry:
-    external_labels:
-      source: tempo
-      cluster: docker-compose
-  storage:
-    path: /var/tempo/generator/wal
-    remote_write:
-      - url: http://prometheus:9090/api/v1/write
-        send_exemplars: true
-  traces_storage:
-    path: /var/tempo/generator/traces
+# metrics_generator:
+#   registry:
+#     external_labels:
+#       source: tempo
+#       cluster: docker-compose
+#   storage:
+#     path: /var/tempo/generator/wal
+#     remote_write:
+#       # - url: http://prometheus:9090/api/v1/write
+#       - url: http://otel-collector:4318/api/v1/write
+#         send_exemplars: true
+#   traces_storage:
+#     path: /var/tempo/generator/traces
 
 storage:
   trace:
-    backend: local                     # backend configuration to use
+    # backend configuration to use
+    backend: s3
+    s3:
+      endpoint: minio.:9000
+      region: .
+      bucket: tempo
+      insecure: true
+      # forcepathstyle: true
+      # enable_dual_stack: false
+      access_key: x62hAFEb4wkRNRaR
+      secret_key: IF1r6ZtELYWbKmBFOamMpj0XjK2W96sW
     wal:
-      path: /var/tempo/wal             # where to store the wal locally
+      # where to store the wal locally
+      path: /var/tempo/wal
     local:
       path: /var/tempo/blocks
 
 overrides:
   defaults:
     metrics_generator:
-      processors: [service-graphs, span-metrics, local-blocks] # enables metrics generator
+      # enables metrics generator
+      processors: [service-graphs, span-metrics, local-blocks]
       generate_native_histograms: both
