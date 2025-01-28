@@ -1,6 +1,10 @@
 ```bash
 while true; do curl --fail http://localhost:3100/ready; sleep 1; done
 while true; do curl --fail http://localhost:3200/ready; sleep 1; done
+
+wget --quiet --tries=1 --output-document=- http://127.0.0.1:9009/ready
+
+while true; do wget --quiet --tries=1 --output-document=- http://localhost:9009/ready; sleep 1; done
 ```
 
 ## ToDo:

@@ -22,7 +22,8 @@ blocks_storage:
 
 # Use memberlist, a gossip-based protocol, to enable the 3 Mimir replicas to communicate
 memberlist:
-  join_members: [mimir-1, mimir-2, mimir-3]
+  # join_members: [mimir-1, mimir-2, mimir-3]
+  join_members: [mimir]
 
 # ruler:
 #   rule_path: /data/ruler
