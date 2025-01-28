@@ -44,14 +44,46 @@ services:
   # -----------------------------------------------------
   # Mimir (Prometheus-compatible metrics backend)
   # -----------------------------------------------------
-  mimir:
+  mimir-1:
     image: grafana/mimir:2.15.0
     command: ["-config.file=/etc/mimir.yaml"]
-    hostname: mimir
+    hostname: mimir-1
     # We do NOT define a healthcheck here because the image lacks curl/wget
     ports:
     - 9009:9009   # Metrics endpoint
     - 8080:8080   # HTTP/ready
+    depends_on:
+      create_bucket:
+        condition: service_completed_successfully
+    volumes:
+    - ./config/mimir.yaml:/etc/mimir.yaml
+    - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
+    - ./volumes/mimir-data:/data
+
+  mimir-2:
+    image: grafana/mimir:2.15.0
+    command: ["-config.file=/etc/mimir.yaml"]
+    hostname: mimir-2
+    # We do NOT define a healthcheck here because the image lacks curl/wget
+    ports:
+    - 9010:9009   # Metrics endpoint
+    - 8081:8080   # HTTP/ready
+    depends_on:
+      create_bucket:
+        condition: service_completed_successfully
+    volumes:
+    - ./config/mimir.yaml:/etc/mimir.yaml
+    - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
+    - ./volumes/mimir-data:/data
+
+  mimir-3:
+    image: grafana/mimir:2.15.0
+    command: ["-config.file=/etc/mimir.yaml"]
+    hostname: mimir-3
+    # We do NOT define a healthcheck here because the image lacks curl/wget
+    ports:
+    - 9011:9009   # Metrics endpoint
+    - 8082:8080   # HTTP/ready
     depends_on:
       create_bucket:
         condition: service_completed_successfully
@@ -66,17 +98,34 @@ services:
   mimir-healthcheck:
     image: busybox:1.37.0
     depends_on:
-    - mimir
+    - mimir-1
+    - mimir-2
+    - mimir-3
     entrypoint: 
     - /bin/sh
     - -c
     - |
-      echo "Waiting for Mimir to be ready...";
-      until wget --quiet --tries=1 --output-document=- http://mimir:8080/ready; do
-        echo "Mimir is not ready yet, retrying in 5 seconds...";
+      echo "Waiting for Mimir-1 to be ready...";
+      until wget --quiet --tries=1 --output-document=- http://mimir-1:8080/ready; do
+        echo "Mimir (1) is not ready yet, retrying in 5 seconds...";
         sleep 5;
       done;
-      echo "Mimir is ready!";
+      echo "Mimir (1) is ready!";
+
+      echo "Waiting for Mimir-2 to be ready...";
+      until wget --quiet --tries=1 --output-document=- http://mimir-2:8080/ready; do
+        echo "Mimir (2) is not ready yet, retrying in 5 seconds...";
+        sleep 5;
+      done;
+      echo "Mimir (2) is ready!";
+
+      echo "Waiting for Mimir-3 to be ready...";
+      until wget --quiet --tries=1 --output-document=- http://mimir-3:8080/ready; do
+        echo "Mimir (3) is not ready yet, retrying in 5 seconds...";
+        sleep 5;
+      done;
+      echo "Mimir (3) is ready!";
+
       exit 0;
 
   # -----------------------------------------------------
