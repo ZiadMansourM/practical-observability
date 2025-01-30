@@ -58,7 +58,7 @@ services:
     volumes:
     - ./config/mimir.yaml:/etc/mimir.yaml
     - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-    - ./volumes/mimir-data:/data
+    - ./volumes/mimir-1-data:/data
 
   mimir-2:
     image: grafana/mimir:2.15.0
@@ -74,7 +74,7 @@ services:
     volumes:
     - ./config/mimir.yaml:/etc/mimir.yaml
     - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-    - ./volumes/mimir-data:/data
+    - ./volumes/mimir-2-data:/data
 
   mimir-3:
     image: grafana/mimir:2.15.0
@@ -90,7 +90,7 @@ services:
     volumes:
     - ./config/mimir.yaml:/etc/mimir.yaml
     - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-    - ./volumes/mimir-data:/data
+    - ./volumes/mimir-3-data:/data
 
   # -----------------------------------------------------
   # Separate sidecar container to health-check Mimir
