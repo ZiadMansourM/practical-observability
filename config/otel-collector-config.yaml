@@ -71,6 +71,6 @@ service:
       processors: [batch]
       exporters: [otlphttp/logs]
     metrics:
-      receivers: [prometheus]
+      receivers: [otlp, prometheus]
       processors: [batch]
       exporters: [prometheusremotewrite]

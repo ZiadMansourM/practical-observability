@@ -4,36 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 
-	"go.opentelemetry.io/contrib/bridges/otelslog"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
-
-const name = "github.com/ZiadMansour/bastet/examples/dice"
-
-var (
-	tracer  = otel.Tracer(name)
-	meter   = otel.Meter(name)
-	logger  = otelslog.NewLogger(name)
-	rollCnt metric.Int64Counter
-)
-
-func init() {
-	var err error
-	rollCnt, err = meter.Int64Counter("dice.rolls",
-		metric.WithDescription("The number of rolls by roll value"),
-		metric.WithUnit("{roll}"))
-	if err != nil {
-		panic(err)
-	}
-}
 
 func rolldice(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(r.Context(), "roll_dice")
@@ -59,7 +37,7 @@ func rolldice(w http.ResponseWriter, r *http.Request) {
 	if _, err := io.WriteString(w, response); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Failed to write response")
-		log.Printf("Write failed: %v\n", err)
+		logger.ErrorContext(ctx, "Failed to write response", "error", err)
 		return
 	}
 

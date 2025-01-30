@@ -7,10 +7,12 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -57,16 +59,16 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	otel.SetTracerProvider(tracerProvider)
 
 	// Set up meter provider.
-	// meterProvider, err := newMeterProvider()
-	// if err != nil {
-	// 	handleErr(err)
-	// 	return
-	// }
-	// shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
-	// otel.SetMeterProvider(meterProvider)
+	meterProvider, err := newMeterProvider(ctx)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
+	otel.SetMeterProvider(meterProvider)
 
 	// Set up logger provider.
-	loggerProvider, err := newLoggerProvider()
+	loggerProvider, err := newLoggerProvider(ctx)
 	if err != nil {
 		handleErr(err)
 		return
@@ -95,7 +97,6 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 		otlptracehttp.WithEndpoint(otelCollectorURL),
 		otlptracehttp.WithInsecure(),
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -113,33 +114,46 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 	return traceProvider, nil
 }
 
-// func newMeterProvider() (*metric.MeterProvider, error) {
-// 	metricExporter, err := stdoutmetric.New()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func newMeterProvider(ctx context.Context) (*metric.MeterProvider, error) {
+	// metricExporter, err := stdoutmetric.New()
+	metricExporter, err := otlpmetrichttp.New(
+		ctx,
+		otlpmetrichttp.WithEndpoint(otelCollectorURL),
+		otlpmetrichttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
 
-// 	meterProvider := metric.NewMeterProvider(
-// 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
-// 			// Default is 1m. Set to 3s for demonstrative purposes.
-// 			metric.WithInterval(3*time.Second))),
-// 	)
-// 	return meterProvider, nil
-// }
+	meterProvider := metric.NewMeterProvider(
+		metric.WithReader(metric.NewPeriodicReader(
+			metricExporter,
+			// Default is 1m. Set to 3s for demonstrative purposes.
+			metric.WithInterval(3*time.Second),
+		)),
+		metric.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(serviceName),
+		)),
+	)
+	return meterProvider, nil
+}
 
-func newLoggerProvider() (*log.LoggerProvider, error) {
+func newLoggerProvider(ctx context.Context) (*log.LoggerProvider, error) {
+	// logExporter, err := stdoutlog.New()
 	logExporter, err := otlploghttp.New(
-		context.Background(),
+		ctx,
 		otlploghttp.WithEndpoint(otelCollectorURL),
 		otlploghttp.WithInsecure(),
 	)
-	// logExporter, err := stdoutlog.New()
 	if err != nil {
 		return nil, err
 	}
 
 	loggerProvider := log.NewLoggerProvider(
-		log.WithProcessor(log.NewBatchProcessor(logExporter)),
+		log.WithProcessor(log.NewBatchProcessor(
+			logExporter,
+		)),
 		log.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceName(serviceName),

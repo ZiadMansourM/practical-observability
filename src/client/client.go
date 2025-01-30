@@ -11,13 +11,16 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -30,10 +33,40 @@ const (
 )
 
 var (
+	meter  = otel.Meter(name)
 	tracer = otel.Tracer(name)
-	// meter  = otel.Meter(name)
 	logger = otelslog.NewLogger(name)
+
+	clientReqCounter metric.Int64Counter
+	clientLatency    metric.Float64Histogram
+	clientErrorCount metric.Int64Counter
 )
+
+func init() {
+	var err error
+
+	clientReqCounter, err = meter.Int64Counter("client_requests_total",
+		metric.WithDescription("Total number of outgoing HTTP requests"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	clientLatency, err = meter.Float64Histogram("client_request_latency_seconds",
+		metric.WithDescription("Latency of outgoing HTTP requests in seconds"),
+		metric.WithUnit("s"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	clientErrorCount, err = meter.Int64Counter("client_request_errors_total",
+		metric.WithDescription("Total number of failed outgoing HTTP requests"),
+	)
+	if err != nil {
+		panic(err)
+	}
+}
 
 func main() {
 	// Handle SIGINT (CTRL+C) gracefully.
@@ -52,11 +85,12 @@ func main() {
 
 	// Create an instrumented HTTP client
 	client := http.Client{
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		// Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Transport: ApplyMiddleware(http.DefaultTransport, clientInstrumentationMiddleware),
 	}
 
 	// Make 5 requests to the dice server
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 10_000; i++ {
 		callDiceServer(context.Background(), &client)
 		// time.Sleep(500 * time.Millisecond) // Add delay between calls to visualize traces more clearly
 	}
@@ -92,6 +126,60 @@ func callDiceServer(ctx context.Context, client *http.Client) {
 	}
 
 	logger.InfoContext(ctx, fmt.Sprintf("Response: %s", body))
+}
+
+// Middleware function type
+type ClientMiddleware func(http.RoundTripper) http.RoundTripper
+
+// ApplyMiddleware applies middleware in sequence for HTTP client
+func ApplyMiddleware(rt http.RoundTripper, middlewares ...ClientMiddleware) http.RoundTripper {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		rt = middlewares[i](rt)
+	}
+	return rt
+}
+
+// === Single Middleware for OpenTelemetry, Metrics, and Logging ===
+func clientInstrumentationMiddleware(next http.RoundTripper) http.RoundTripper {
+	return roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		start := time.Now()
+		ctx, span := tracer.Start(req.Context(), fmt.Sprintf("Client HTTP %s %s", req.Method, req.URL.Path))
+		defer span.End()
+
+		// Increment request count
+		clientReqCounter.Add(ctx, 1)
+
+		logger.InfoContext(ctx, "Sending HTTP request",
+			"method", req.Method,
+			"url", req.URL.String(),
+		)
+
+		resp, err := next.RoundTrip(req)
+		if err != nil {
+			span.RecordError(err)
+			clientErrorCount.Add(ctx, 1, metric.WithAttributes(attribute.String("error.type", err.Error())))
+			logger.ErrorContext(ctx, "HTTP request failed", "error", err)
+			return nil, err
+		}
+
+		// Measure request latency
+		elapsedTime := time.Since(start).Seconds()
+		clientLatency.Record(ctx, elapsedTime)
+
+		logger.InfoContext(ctx, "Received HTTP response",
+			"status", resp.StatusCode,
+			"elapsed_time", elapsedTime,
+		)
+
+		return resp, nil
+	})
+}
+
+// Helper type to implement RoundTripper interface
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -130,13 +218,13 @@ func setupOTelSDK(ctx context.Context) (shutdown func(context.Context) error, er
 	otel.SetTracerProvider(tracerProvider)
 
 	// Set up meter provider.
-	// meterProvider, err := newMeterProvider()
-	// if err != nil {
-	// 	handleErr(err)
-	// 	return
-	// }
-	// shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
-	// otel.SetMeterProvider(meterProvider)
+	meterProvider, err := newMeterProvider(ctx)
+	if err != nil {
+		handleErr(err)
+		return
+	}
+	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
+	otel.SetMeterProvider(meterProvider)
 
 	// Set up logger provider.
 	loggerProvider, err := newLoggerProvider()
@@ -186,19 +274,30 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 	return traceProvider, nil
 }
 
-// func newMeterProvider() (*metric.MeterProvider, error) {
-// 	metricExporter, err := stdoutmetric.New()
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
+	// metricExporter, err := stdoutmetric.New()
+	metricExporter, err := otlpmetrichttp.New(
+		ctx,
+		otlpmetrichttp.WithEndpoint(otelCollectorURL),
+		otlpmetrichttp.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
 
-// 	meterProvider := metric.NewMeterProvider(
-// 		metric.WithReader(metric.NewPeriodicReader(metricExporter,
-// 			// Default is 1m. Set to 3s for demonstrative purposes.
-// 			metric.WithInterval(3*time.Second))),
-// 	)
-// 	return meterProvider, nil
-// }
+	meterProvider := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(
+			metricExporter,
+			// Default is 1m. Set to 3s for demonstrative purposes.
+			sdkmetric.WithInterval(3*time.Second),
+		)),
+		sdkmetric.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(serviceName),
+		)),
+	)
+	return meterProvider, nil
+}
 
 func newLoggerProvider() (*log.LoggerProvider, error) {
 	logExporter, err := otlploghttp.New(
