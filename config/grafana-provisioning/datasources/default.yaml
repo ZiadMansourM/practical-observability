@@ -1,6 +1,18 @@
 apiVersion: 1
 
 datasources:
+- name: Mimir
+  uid: mimir_uid
+  type: prometheus
+  access: proxy
+  url: http://mimir-1:8080/prometheus
+  isDefault: false
+  editable: true
+  jsonData:
+    httpHeaderName1: "X-Scope-OrgID"
+  secureJsonData:
+    httpHeaderValue1: "demo"
+
 - name: Loki
   uid: loki_uid
   type: loki
