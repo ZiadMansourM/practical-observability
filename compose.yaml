@@ -181,7 +181,8 @@ services:
   # OpenTelemetry Collector
   # -----------------------------------------------------
   otel-collector:
-    image: otel/opentelemetry-collector:0.80.0
+    # image: otel/opentelemetry-collector:0.80.0
+    image: otel/opentelemetry-collector-contrib:0.118.0
     restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
@@ -194,8 +195,17 @@ services:
       mimir-healthcheck:
         condition: service_completed_successfully
     ports:
-    - 4317:4317 # For gRPC
-    - 4318:4318 # For HTTP
+    - 4317:4317   # For gRPC
+    - 4318:4318   # For HTTP
+    - 127.0.0.1:55679:55679 # ZPages
+
+    # Links:
+    # http://127.0.0.1:55679/debug/servicez
+    # http://127.0.0.1:55679/debug/pipelinez
+    # http://127.0.0.1:55679/debug/extensionz
+    # http://127.0.0.1:55679/debug/featurez
+    # http://127.0.0.1:55679/debug/tracez
+    # http://127.0.0.1:55679/debug/rpcz
 
   # -----------------------------------------------------
   # Grafana (UI)
