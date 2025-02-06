@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 const name = "github.com/ZiadMansour/bastet/examples/dice"
@@ -172,8 +173,11 @@ func instrumentationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
+		// *** Extract the trace context from the incoming request headers ***
+		ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+
 		// Start OpenTelemetry span
-		ctx, span := tracer.Start(r.Context(), fmt.Sprintf("HTTP %s %s", r.Method, r.URL.Path))
+		ctx, span := tracer.Start(ctx, fmt.Sprintf("HTTP %s %s", r.Method, r.URL.Path))
 		defer span.End()
 
 		// Track request count and size
@@ -185,6 +189,7 @@ func instrumentationMiddleware(next http.Handler) http.Handler {
 
 		// Wrap response writer to capture response size
 		rec := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+		r = r.WithContext(ctx)
 		next.ServeHTTP(rec, r)
 
 		// Track response size and duration

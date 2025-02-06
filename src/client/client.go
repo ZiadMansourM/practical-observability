@@ -90,7 +90,7 @@ func main() {
 	}
 
 	// Make 5 requests to the dice server
-	for i := 0; i < 10_000; i++ {
+	for i := 0; i < 1; i++ {
 		callDiceServer(context.Background(), &client)
 		// time.Sleep(500 * time.Millisecond) // Add delay between calls to visualize traces more clearly
 	}
@@ -145,6 +145,9 @@ func clientInstrumentationMiddleware(next http.RoundTripper) http.RoundTripper {
 		start := time.Now()
 		ctx, span := tracer.Start(req.Context(), fmt.Sprintf("Client HTTP %s %s", req.Method, req.URL.Path))
 		defer span.End()
+
+		// Inject the current trace context into the outgoing request headers.
+		otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 		// Increment request count
 		clientReqCounter.Add(ctx, 1)
