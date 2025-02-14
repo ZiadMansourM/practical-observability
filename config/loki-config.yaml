@@ -21,6 +21,15 @@ query_range:
 limits_config:
   allow_structured_metadata: true
   metric_aggregation_enabled: true
+  # Assume month 31 days.
+  #   - Keep Global Retention for a maximum of One Month.
+  #   - Critical Services for Up to 1 year. "Production Workaround".
+  #   - Dev Environments for 14 days.
+  retention_period: 744h
+  # retention_stream:
+  # - selector: '{namespace="dev"}'
+  #   priority: 1
+  #   period: 24h
 
 schema_config:
   configs:
@@ -40,6 +49,14 @@ storage_config:
   aws:
     s3: http://x62hAFEb4wkRNRaR:IF1r6ZtELYWbKmBFOamMpj0XjK2W96sW@minio.:9000/loki
     s3forcepathstyle: true
+
+compactor:
+  working_directory: /loki/retention
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: s3
 
 query_scheduler:
   # the TSDB index dispatches many more, but each individually smaller, requests. 

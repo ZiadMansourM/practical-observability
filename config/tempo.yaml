@@ -28,7 +28,7 @@ ingester:
 compactor:
   compaction:
     # Configure total trace retention
-    block_retention: 48h
+    block_retention: 8928h
 
 # metrics_generator:
 #   registry:

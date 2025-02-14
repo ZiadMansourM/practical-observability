@@ -97,7 +97,7 @@ func run() (err error) {
 
 	// Start HTTP server.
 	srv := &http.Server{
-		Addr:         "127.0.0.1:8080",
+		Addr:         "0.0.0.0:3030",
 		BaseContext:  func(_ net.Listener) context.Context { return ctx },
 		ReadTimeout:  time.Second,
 		WriteTimeout: 10 * time.Second,

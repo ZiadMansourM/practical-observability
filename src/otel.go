@@ -20,7 +20,7 @@ import (
 
 const (
 	serviceName      = "dice"
-	otelCollectorURL = "localhost:4318"
+	otelCollectorURL = "collector.jameelfinance.com.eg"
 )
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -95,7 +95,6 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 	traceExporter, err := otlptracehttp.New(
 		ctx,
 		otlptracehttp.WithEndpoint(otelCollectorURL),
-		otlptracehttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, err
@@ -119,7 +118,6 @@ func newMeterProvider(ctx context.Context) (*metric.MeterProvider, error) {
 	metricExporter, err := otlpmetrichttp.New(
 		ctx,
 		otlpmetrichttp.WithEndpoint(otelCollectorURL),
-		otlpmetrichttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, err
@@ -144,7 +142,6 @@ func newLoggerProvider(ctx context.Context) (*log.LoggerProvider, error) {
 	logExporter, err := otlploghttp.New(
 		ctx,
 		otlploghttp.WithEndpoint(otelCollectorURL),
-		otlploghttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, err

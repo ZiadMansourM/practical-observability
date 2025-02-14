@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -28,7 +29,7 @@ import (
 
 const (
 	serviceName      = "dice-client"
-	otelCollectorURL = "localhost:4318"
+	otelCollectorURL = "collector.jameelfinance.com.eg"
 	name             = "github.com/ZiadMansour/bastet/examples/dice"
 )
 
@@ -102,7 +103,7 @@ func callDiceServer(ctx context.Context, client *http.Client) {
 	defer span.End()
 
 	// Make the HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:8080/rolldice/", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:3030/rolldice/", nil)
 	if err != nil {
 		span.RecordError(err)
 		logger.ErrorContext(ctx, "Failed to create request", "error", err)
@@ -112,6 +113,7 @@ func callDiceServer(ctx context.Context, client *http.Client) {
 	resp, err := client.Do(req)
 	if err != nil {
 		span.RecordError(err)
+		span.SetStatus(codes.Error, "Request failed")
 		logger.ErrorContext(ctx, "Request failed", "error", err)
 		return
 	}
@@ -160,6 +162,7 @@ func clientInstrumentationMiddleware(next http.RoundTripper) http.RoundTripper {
 		resp, err := next.RoundTrip(req)
 		if err != nil {
 			span.RecordError(err)
+			span.SetStatus(codes.Error, "HTTP request failed")
 			clientErrorCount.Add(ctx, 1, metric.WithAttributes(attribute.String("error.type", err.Error())))
 			logger.ErrorContext(ctx, "HTTP request failed", "error", err)
 			return nil, err
@@ -257,7 +260,6 @@ func newTraceProvider(ctx context.Context) (*trace.TracerProvider, error) {
 	traceExporter, err := otlptracehttp.New(
 		ctx,
 		otlptracehttp.WithEndpoint(otelCollectorURL),
-		otlptracehttp.WithInsecure(),
 	)
 
 	if err != nil {
@@ -282,7 +284,6 @@ func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 	metricExporter, err := otlpmetrichttp.New(
 		ctx,
 		otlpmetrichttp.WithEndpoint(otelCollectorURL),
-		otlpmetrichttp.WithInsecure(),
 	)
 	if err != nil {
 		return nil, err
@@ -306,7 +307,6 @@ func newLoggerProvider() (*log.LoggerProvider, error) {
 	logExporter, err := otlploghttp.New(
 		context.Background(),
 		otlploghttp.WithEndpoint(otelCollectorURL),
-		otlploghttp.WithInsecure(),
 	)
 	// logExporter, err := stdoutlog.New()
 	if err != nil {

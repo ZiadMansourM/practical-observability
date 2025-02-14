@@ -5,13 +5,13 @@ datasources:
   uid: mimir_uid
   type: prometheus
   access: proxy
-  url: http://mimir-1:8080/prometheus
+  url: http://mimir:8080/prometheus
   isDefault: false
   editable: true
-  jsonData:
-    httpHeaderName1: "X-Scope-OrgID"
-  secureJsonData:
-    httpHeaderValue1: "demo"
+  # jsonData:
+    # httpHeaderName1: "X-Scope-OrgID"
+  # secureJsonData:
+    # httpHeaderValue1: "demo"
 
 - name: Loki
   uid: loki_uid
@@ -45,6 +45,8 @@ datasources:
   isDefault: false
   editable: true
   jsonData:
+    serviceMap:
+      datasourceUid: mimir_uid
     tracesToLogsV2:
       datasourceUid: loki_uid
       spanStartTimeShift: '-1h'

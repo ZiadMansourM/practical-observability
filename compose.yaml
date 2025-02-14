@@ -1,5 +1,14 @@
 name: lgtm
 
+# x-logging: &logging
+#   logging:
+#     driver: fluentd
+#     options:
+#       fluentd-address: unix:///var/run/fluentd.sock
+#       fluentd-retry-wait: 120s
+      # listenAddress: 
+      # tag: '{{ index .Config.Labels "com.docker.compose.project" }}/{{ index .Config.Labels "com.docker.compose.service" }}'
+
 services:
   # -----------------------------------------------------
   # MinIO (Object Storage)
@@ -44,10 +53,10 @@ services:
   # -----------------------------------------------------
   # Mimir (Prometheus-compatible metrics backend)
   # -----------------------------------------------------
-  mimir-1:
+  mimir:
     image: grafana/mimir:2.15.0
     command: ["-config.file=/etc/mimir.yaml"]
-    hostname: mimir-1
+    hostname: mimir
     # We do NOT define a healthcheck here because the image lacks curl/wget
     ports:
     - 9009:9009   # Metrics endpoint
@@ -57,40 +66,55 @@ services:
         condition: service_completed_successfully
     volumes:
     - ./config/mimir.yaml:/etc/mimir.yaml
-    - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-    - ./volumes/mimir-1-data:/data
+    - ./volumes/mimir-data:/data
+  
+  # mimir-1:
+  #   image: grafana/mimir:2.15.0
+  #   command: ["-config.file=/etc/mimir.yaml"]
+  #   hostname: mimir-1
+  #   # We do NOT define a healthcheck here because the image lacks curl/wget
+  #   ports:
+  #   - 9009:9009   # Metrics endpoint
+  #   - 8080:8080   # HTTP/ready
+  #   depends_on:
+  #     create_bucket:
+  #       condition: service_completed_successfully
+  #   volumes:
+  #   - ./config/mimir.yaml:/etc/mimir.yaml
+  #   - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
+  #   - ./volumes/mimir-1-data:/data
 
-  mimir-2:
-    image: grafana/mimir:2.15.0
-    command: ["-config.file=/etc/mimir.yaml"]
-    hostname: mimir-2
-    # We do NOT define a healthcheck here because the image lacks curl/wget
-    ports:
-    - 9010:9009   # Metrics endpoint
-    - 8081:8080   # HTTP/ready
-    depends_on:
-      create_bucket:
-        condition: service_completed_successfully
-    volumes:
-    - ./config/mimir.yaml:/etc/mimir.yaml
-    - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-    - ./volumes/mimir-2-data:/data
+  # mimir-2:
+  #   image: grafana/mimir:2.15.0
+  #   command: ["-config.file=/etc/mimir.yaml"]
+  #   hostname: mimir-2
+  #   # We do NOT define a healthcheck here because the image lacks curl/wget
+  #   ports:
+  #   - 9010:9009   # Metrics endpoint
+  #   - 8081:8080   # HTTP/ready
+  #   depends_on:
+  #     create_bucket:
+  #       condition: service_completed_successfully
+  #   volumes:
+  #   - ./config/mimir.yaml:/etc/mimir.yaml
+  #   - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
+  #   - ./volumes/mimir-2-data:/data
 
-  mimir-3:
-    image: grafana/mimir:2.15.0
-    command: ["-config.file=/etc/mimir.yaml"]
-    hostname: mimir-3
-    # We do NOT define a healthcheck here because the image lacks curl/wget
-    ports:
-    - 9011:9009   # Metrics endpoint
-    - 8082:8080   # HTTP/ready
-    depends_on:
-      create_bucket:
-        condition: service_completed_successfully
-    volumes:
-    - ./config/mimir.yaml:/etc/mimir.yaml
-    - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-    - ./volumes/mimir-3-data:/data
+  # mimir-3:
+  #   image: grafana/mimir:2.15.0
+  #   command: ["-config.file=/etc/mimir.yaml"]
+  #   hostname: mimir-3
+  #   # We do NOT define a healthcheck here because the image lacks curl/wget
+  #   ports:
+  #   - 9011:9009   # Metrics endpoint
+  #   - 8082:8080   # HTTP/ready
+  #   depends_on:
+  #     create_bucket:
+  #       condition: service_completed_successfully
+  #   volumes:
+  #   - ./config/mimir.yaml:/etc/mimir.yaml
+  #   - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
+  #   - ./volumes/mimir-3-data:/data
 
   # -----------------------------------------------------
   # Separate sidecar container to health-check Mimir
@@ -98,33 +122,41 @@ services:
   mimir-healthcheck:
     image: busybox:1.37.0
     depends_on:
-    - mimir-1
-    - mimir-2
-    - mimir-3
+    - mimir
+    # - mimir-1
+    # - mimir-2
+    # - mimir-3
     entrypoint: 
     - /bin/sh
     - -c
     - |
-      echo "Waiting for Mimir-1 to be ready...";
-      until wget --quiet --tries=1 --output-document=- http://mimir-1:8080/ready; do
-        echo "Mimir (1) is not ready yet, retrying in 5 seconds...";
+      echo "Waiting for Mimir to be ready...";
+      until wget --quiet --tries=1 --output-document=- http://mimir:8080/ready; do
+        echo "Mimir is not ready yet, retrying in 5 seconds...";
         sleep 5;
       done;
-      echo "Mimir (1) is ready!";
+      echo "Mimir is ready!";
 
-      echo "Waiting for Mimir-2 to be ready...";
-      until wget --quiet --tries=1 --output-document=- http://mimir-2:8080/ready; do
-        echo "Mimir (2) is not ready yet, retrying in 5 seconds...";
-        sleep 5;
-      done;
-      echo "Mimir (2) is ready!";
+      # echo "Waiting for Mimir-1 to be ready...";
+      # until wget --quiet --tries=1 --output-document=- http://mimir-1:8080/ready; do
+      #   echo "Mimir (1) is not ready yet, retrying in 5 seconds...";
+      #   sleep 5;
+      # done;
+      # echo "Mimir (1) is ready!";
 
-      echo "Waiting for Mimir-3 to be ready...";
-      until wget --quiet --tries=1 --output-document=- http://mimir-3:8080/ready; do
-        echo "Mimir (3) is not ready yet, retrying in 5 seconds...";
-        sleep 5;
-      done;
-      echo "Mimir (3) is ready!";
+      # echo "Waiting for Mimir-2 to be ready...";
+      # until wget --quiet --tries=1 --output-document=- http://mimir-2:8080/ready; do
+      #   echo "Mimir (2) is not ready yet, retrying in 5 seconds...";
+      #   sleep 5;
+      # done;
+      # echo "Mimir (2) is ready!";
+
+      # echo "Waiting for Mimir-3 to be ready...";
+      # until wget --quiet --tries=1 --output-document=- http://mimir-3:8080/ready; do
+      #   echo "Mimir (3) is not ready yet, retrying in 5 seconds...";
+      #   sleep 5;
+      # done;
+      # echo "Mimir (3) is ready!";
 
       exit 0;
 
@@ -133,6 +165,7 @@ services:
   # -----------------------------------------------------
   loki:
     image: grafana/loki:3.3.2
+    # <<: *logging
     restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
     healthcheck:
@@ -174,8 +207,8 @@ services:
       user: root
     ports:
     - 3200 # Tempo
-    - 4317 # OTLP gRPC
-    - 4318 # OTLP HTTP
+    - 4320:4317 # OTLP gRPC
+    - 4321:4318 # OTLP HTTP
 
   # -----------------------------------------------------
   # OpenTelemetry Collector
@@ -183,10 +216,13 @@ services:
   otel-collector:
     # image: otel/opentelemetry-collector:0.80.0
     image: otel/opentelemetry-collector-contrib:0.118.0
+    user: "0"
     restart: unless-stopped
     command: ["--config=/etc/otel-collector-config.yaml"]
     volumes:
     - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    # - /var/run/fluentd.sock:/fluentd.sock
     depends_on:
       tempo:
         condition: service_healthy
@@ -197,7 +233,8 @@ services:
     ports:
     - 4317:4317   # For gRPC
     - 4318:4318   # For HTTP
-    - 127.0.0.1:55679:55679 # ZPages
+    - 55679:55679 # ZPages
+    - 24224:24224 # Fluentd
 
     # Links:
     # http://127.0.0.1:55679/debug/servicez

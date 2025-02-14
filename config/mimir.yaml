@@ -1,7 +1,13 @@
 # Do not use this configuration in production.
 # It is for demonstration purposes only.
 # Run Mimir in single process mode, with all components running in 1 process.
-target: all,alertmanager,overrides-exporter
+target: all
+
+multitenancy_enabled: false
+
+ingester:
+  ring:
+    replication_factor: 1
 
 # Configure Mimir to use Minio as object storage backend.
 common:
@@ -14,6 +20,9 @@ common:
       bucket_name: mimir
       insecure: true
 
+limits:
+  compactor_blocks_retention_period: 1y
+
 # Blocks storage requires a prefix when using a common object storage bucket.
 blocks_storage:
   storage_prefix: blocks
@@ -22,8 +31,8 @@ blocks_storage:
 
 # Use memberlist, a gossip-based protocol, to enable the 3 Mimir replicas to communicate
 memberlist:
-  join_members: [mimir-1, mimir-2, mimir-3]
-  # join_members: [mimir]
+  # join_members: [mimir-1, mimir-2, mimir-3]
+  join_members: [mimir]
 
 # ruler:
 #   rule_path: /data/ruler
