@@ -11,15 +11,24 @@ extensions:
 receivers:
   filelog:
     include:
+    # - /log.log
     - /var/lib/docker/containers/*/*-json.log
-    operators:
-    - id: container-parser
-      type: container
-      format: docker
-      add_metadata_from_filepath: false
-  # fluentforward:
-  #   # endpoint: otel-collector:24224
-  #   listenAddress: unix:///fluentd.sock
+    include_file_path: true
+    include_file_name: false
+    start_at: beginning
+    multiline:
+      line_start_pattern: '^\{'
+    # operators:
+    # - id: parse-log-message
+    #   type: json_parser
+    #   parse_from: log
+    # - id: re-labelling
+    #   type: metadata
+    #   resource:
+    #     service.name: EXPR($$.attrs.tag)
+    #     # log.level: EXPR($$.log_level)
+    #     # log.timestamp: EXPR($$.log_ts)
+    #     stream: EXPR($$.stream)
 
   otlp:
     protocols:
@@ -55,21 +64,40 @@ receivers:
       - job_name: 'mimir'
         static_configs:
         - targets: ["mimir:8080"]
-      # - job_name: "mimir-1"
-      #   static_configs:
-      #   - targets: ["mimir-1:8080"]
-      # - job_name: "mimir-2"
-      #   static_configs:
-      #   - targets: ["mimir-2:8080"]
-      # - job_name: "mimir-3"
-      #   static_configs:
-      #   - targets: ["mimir-3:8080"]
-
 
 processors:
+  attributes/source:
+    actions:
+    - action: insert
+      key: source
+      value: docker
+
   batch:
     # send_batch_size: 1000
     # timeout: 10s
+
+  transform/service-name:
+    flatten_data: true
+    error_mode: ignore
+    log_statements:
+    - context: log
+      statements:
+      - set(attributes["log.record.original"], body)
+      # ParseJSON body to get the tag
+      - merge_maps(cache, ParseJSON(body), "upsert")
+      - set(resource.attributes["service.name"], cache["attrs"]["tag"])
+      # set body to cache["log"]
+      - set(body, cache["log"])
+      - set(attributes["log.iostream"], cache["stream"])
+      - set(attributes["timestamp"], cache["time"])
+      - set(time_unix_nano, Int(cache["time"]))
+      # - set(resource.attributes["service.name"], "lgtm/loki")
+  
+  # transform/service-name:
+  #   flatten_data: true
+  #   log_statements:
+  #   - set(resource.attributes["service.name"], log.attributes["attrs"]["tag"])
+  #   # - set(resource.attributes["service.name"], attributes["attrs"]["tag"])
 
 exporters:  
   debug:
@@ -111,7 +139,7 @@ exporters:
 
 
 service:
-  extensions: [zpages, health_check]
+  # extensions: [zpages, health_check]
   # extensions: [zpages, health_check, file_storage]
 
   pipelines:
@@ -125,8 +153,9 @@ service:
       exporters: [otlphttp/logs]
     logs/filelog:
       receivers: [filelog]
-      processors: [batch]
-      exporters: [debug]
+      processors: [attributes/source, transform/service-name]
+      exporters: [otlphttp/logs]
+      # exporters: [debug]
     metrics:
       receivers: [otlp, prometheus]
       processors: [batch]
@@ -144,9 +173,10 @@ service:
               host: 'otel-collector'
               port: 8888
     logs:
+      # level: debug
       processors:
-        - batch:
-            exporter:
-              otlp:
-                protocol: http/protobuf
-                endpoint: http://otel-collector:4318
+      - batch:
+          exporter:
+            otlp:
+              protocol: http/protobuf
+              endpoint: http://otel-collector:4318

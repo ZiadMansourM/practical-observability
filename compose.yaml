@@ -1,13 +1,10 @@
 name: lgtm
 
-# x-logging: &logging
-#   logging:
-#     driver: fluentd
-#     options:
-#       fluentd-address: unix:///var/run/fluentd.sock
-#       fluentd-retry-wait: 120s
-      # listenAddress: 
-      # tag: '{{ index .Config.Labels "com.docker.compose.project" }}/{{ index .Config.Labels "com.docker.compose.service" }}'
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      tag: '{{ index .Config.Labels "com.docker.compose.project" }}/{{ index .Config.Labels "com.docker.compose.service" }}'
 
 services:
   # -----------------------------------------------------
@@ -15,6 +12,10 @@ services:
   # -----------------------------------------------------
   minio:
     image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/minio'
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -29,6 +30,10 @@ services:
   # -----------------------------------------------------
   create_bucket:
     image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/create-bucket'
     depends_on:
     - minio
     entrypoint:
@@ -55,6 +60,10 @@ services:
   # -----------------------------------------------------
   mimir:
     image: grafana/mimir:2.15.0
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/mimir'
     command: ["-config.file=/etc/mimir.yaml"]
     hostname: mimir
     # We do NOT define a healthcheck here because the image lacks curl/wget
@@ -68,59 +77,15 @@ services:
     - ./config/mimir.yaml:/etc/mimir.yaml
     - ./volumes/mimir-data:/data
   
-  # mimir-1:
-  #   image: grafana/mimir:2.15.0
-  #   command: ["-config.file=/etc/mimir.yaml"]
-  #   hostname: mimir-1
-  #   # We do NOT define a healthcheck here because the image lacks curl/wget
-  #   ports:
-  #   - 9009:9009   # Metrics endpoint
-  #   - 8080:8080   # HTTP/ready
-  #   depends_on:
-  #     create_bucket:
-  #       condition: service_completed_successfully
-  #   volumes:
-  #   - ./config/mimir.yaml:/etc/mimir.yaml
-  #   - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-  #   - ./volumes/mimir-1-data:/data
-
-  # mimir-2:
-  #   image: grafana/mimir:2.15.0
-  #   command: ["-config.file=/etc/mimir.yaml"]
-  #   hostname: mimir-2
-  #   # We do NOT define a healthcheck here because the image lacks curl/wget
-  #   ports:
-  #   - 9010:9009   # Metrics endpoint
-  #   - 8081:8080   # HTTP/ready
-  #   depends_on:
-  #     create_bucket:
-  #       condition: service_completed_successfully
-  #   volumes:
-  #   - ./config/mimir.yaml:/etc/mimir.yaml
-  #   - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-  #   - ./volumes/mimir-2-data:/data
-
-  # mimir-3:
-  #   image: grafana/mimir:2.15.0
-  #   command: ["-config.file=/etc/mimir.yaml"]
-  #   hostname: mimir-3
-  #   # We do NOT define a healthcheck here because the image lacks curl/wget
-  #   ports:
-  #   - 9011:9009   # Metrics endpoint
-  #   - 8082:8080   # HTTP/ready
-  #   depends_on:
-  #     create_bucket:
-  #       condition: service_completed_successfully
-  #   volumes:
-  #   - ./config/mimir.yaml:/etc/mimir.yaml
-  #   - ./config/alertmanager-fallback-config.yaml:/etc/alertmanager-fallback-config.yaml
-  #   - ./volumes/mimir-3-data:/data
-
   # -----------------------------------------------------
   # Separate sidecar container to health-check Mimir
   # -----------------------------------------------------
   mimir-healthcheck:
     image: busybox:1.37.0
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/mimir-healthcheck'
     depends_on:
     - mimir
     # - mimir-1
@@ -136,28 +101,6 @@ services:
         sleep 5;
       done;
       echo "Mimir is ready!";
-
-      # echo "Waiting for Mimir-1 to be ready...";
-      # until wget --quiet --tries=1 --output-document=- http://mimir-1:8080/ready; do
-      #   echo "Mimir (1) is not ready yet, retrying in 5 seconds...";
-      #   sleep 5;
-      # done;
-      # echo "Mimir (1) is ready!";
-
-      # echo "Waiting for Mimir-2 to be ready...";
-      # until wget --quiet --tries=1 --output-document=- http://mimir-2:8080/ready; do
-      #   echo "Mimir (2) is not ready yet, retrying in 5 seconds...";
-      #   sleep 5;
-      # done;
-      # echo "Mimir (2) is ready!";
-
-      # echo "Waiting for Mimir-3 to be ready...";
-      # until wget --quiet --tries=1 --output-document=- http://mimir-3:8080/ready; do
-      #   echo "Mimir (3) is not ready yet, retrying in 5 seconds...";
-      #   sleep 5;
-      # done;
-      # echo "Mimir (3) is ready!";
-
       exit 0;
 
   # -----------------------------------------------------
@@ -165,7 +108,10 @@ services:
   # -----------------------------------------------------
   loki:
     image: grafana/loki:3.3.2
-    # <<: *logging
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/loki'
     restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
     healthcheck:
@@ -189,6 +135,10 @@ services:
   # -----------------------------------------------------
   tempo:
     image: grafana/tempo:2.7.0
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/tempo'
     restart: unless-stopped
     command: ["-config.file=/etc/tempo.yaml"]
     healthcheck:
@@ -217,12 +167,16 @@ services:
     # image: otel/opentelemetry-collector:0.80.0
     image: otel/opentelemetry-collector-contrib:0.118.0
     user: "0"
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/otel-collector'
     restart: unless-stopped
-    command: ["--config=/etc/otel-collector-config.yaml"]
+    command: ["--config=/etc/otel-collector-config.yaml", "--feature-gates=transform.flatten.logs"]
     volumes:
     - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    # - /var/run/fluentd.sock:/fluentd.sock
+    - ./test/log.log:/log.log
     depends_on:
       tempo:
         condition: service_healthy
@@ -249,6 +203,10 @@ services:
   # -----------------------------------------------------
   grafana:
     image: grafana/grafana-oss:11.4.0-ubuntu
+    logging:
+      driver: json-file
+      options:
+        tag: 'lgtm/grafana'
     restart: unless-stopped
     environment:
     - GF_SECURITY_ADMIN_USER=admin
@@ -264,6 +222,6 @@ services:
       mimir-healthcheck:
         condition: service_completed_successfully
     volumes:
-    - ./config/grafana-provisioning:/etc/grafana/provisioning
+    - ./config/grafana-provisioning/datasources:/etc/grafana/provisioning/datasources
     - ./volumes/grafana-data:/var/lib/grafana
     - ./volumes/grafana-logs:/var/log/grafana
