@@ -66,38 +66,43 @@ receivers:
         - targets: ["mimir:8080"]
 
 processors:
-  attributes/source:
+  attributes/source-type-attr:
     actions:
     - action: insert
       key: source
       value: docker
 
+  resource/source-type-attr:
+    # actions: insert, update, upsert, delete, hash, extract, convert.
+    attributes:
+    - key: source.type
+      value: docker
+      action: upsert
+  
+  resource/source-location-attr:
+    # actions: insert, update, upsert, delete, hash, extract, convert.
+    attributes:
+    - key: source.location
+      value: ziad-mac
+      action: upsert
+
   batch:
     # send_batch_size: 1000
     # timeout: 10s
 
-  transform/service-name:
+  transform/add-service-name:
     flatten_data: true
     error_mode: ignore
     log_statements:
     - context: log
       statements:
       - set(attributes["log.record.original"], body)
-      # ParseJSON body to get the tag
       - merge_maps(cache, ParseJSON(body), "upsert")
       - set(resource.attributes["service.name"], cache["attrs"]["tag"])
-      # set body to cache["log"]
       - set(body, cache["log"])
       - set(attributes["log.iostream"], cache["stream"])
       - set(attributes["timestamp"], cache["time"])
       - set(time_unix_nano, Int(cache["time"]))
-      # - set(resource.attributes["service.name"], "lgtm/loki")
-  
-  # transform/service-name:
-  #   flatten_data: true
-  #   log_statements:
-  #   - set(resource.attributes["service.name"], log.attributes["attrs"]["tag"])
-  #   # - set(resource.attributes["service.name"], attributes["attrs"]["tag"])
 
 exporters:  
   debug:
@@ -106,7 +111,7 @@ exporters:
     # sampling_thereafter: 200
 
   # File Exporter: ingest logs to local file
-  # Ref: https://opentelemetry.io/docs/collector/deployment/agent/#example
+  # Ref: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/fileexporter
   # file:
   #   path: ./app42_example.log
   #   rotation:
@@ -116,22 +121,20 @@ exporters:
     tls:
       insecure: true
 
-  otlp:
+  otlp/traces:
     endpoint: tempo:4317
     tls:
       insecure: true
     # sending_queue:
     #   storage: file_storage/otc
 
-  otlphttp:
+  otlphttp/metrics:
     endpoint: http://mimir:8080/otlp
     tls:
       insecure: true
-    # endpoint: http://mimir-1:8080/otlp
   
   prometheusremotewrite:
     endpoint: http://mimir:8080/api/v1/push
-    # endpoint: http://mimir-1:8080/api/v1/push
     tls:
       insecure: true
     # headers:
@@ -146,23 +149,25 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp]
+      exporters: [otlp/traces]
     logs:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlphttp/logs]
     logs/filelog:
       receivers: [filelog]
-      processors: [attributes/source, transform/service-name]
+      processors: [resource/source-type-attr, resource/source-location-attr, transform/add-service-name]
       exporters: [otlphttp/logs]
       # exporters: [debug]
     metrics:
       receivers: [otlp, prometheus]
       processors: [batch]
-      exporters: [otlphttp]
+      exporters: [otlphttp/metrics]
     # metrics/hostmetrics:
     #   receivers: [hostmetrics]
-    #   exporters: [debug]
+    #   processors: [resource/source-location-attr]
+    #   exporters: [otlphttp/metrics]
+      # exporters: [debug]
 
   telemetry:
     metrics:
